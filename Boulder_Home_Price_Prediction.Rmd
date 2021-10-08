@@ -1,0 +1,69 @@
+---
+title: "midterm"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(sf)
+library(spdep)
+library(caret)
+library(ckanr)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(ggcorrplot)
+
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+palette5 <- c("#25CB10", "#5AB60C", "#8FA108",   "#C48C04", "#FA7800")
+
+# create boulder_homes geojson dataset, convert to sf
+boulder_homes <- 
+  st_read("./studentData.geojson") %>%
+  st_as_sf(coords = geometry, crs = 4326, agr = "constant") %>%
+  st_transform('ESRI:102286') %>%     # need to find ESRI code for Boulder
+  mutate(price_per_sf = price / TotalFinishedSF)
+
+boulder_boundary <-
+  st_read("./City_of_Boulder_City_Limits.geojson") %>%
+  st_transform('ESRI:102286') %>%     # need to find ESRI code for Boulder
+  st_as_sf(coords = geometry, crs = 4326, agr = "constant")
+```
+
+```{r visualize, include=FALSE}
+
+
+ggplot() +
+  geom_sf(data = boulder_boundary, fill = "grey40") +
+  geom_sf(data = boulder_homes, aes(colour = q5(price_per_sf)), 
+          show.legend = "point", size = .75) +
+  scale_colour_manual(values = palette5,
+                   labels=qBr(boulder_homes,"price_per_sf"),
+                   name="Quintile\nBreaks") +
+  labs(title="Price Per Square Foot, Boulder") +
+  mapTheme()
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
