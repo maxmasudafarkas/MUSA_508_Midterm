@@ -22,22 +22,19 @@ palette5 <- c("#25CB10", "#5AB60C", "#8FA108",   "#C48C04", "#FA7800")
 
 # create boulder_homes geojson dataset, convert to sf
 boulder_homes <- 
-  st_read("./studentData.geojson") %>%
-  st_as_sf(coords = geometry, crs = 4326, agr = "constant") %>%
-  st_transform('ESRI:102286') %>%     # need to find ESRI code for Boulder
+  st_read("studentData.geojson", crs = 'ESRI:102254' ) %>%
   mutate(price_per_sf = price / TotalFinishedSF)
 
 boulder_boundary <-
   st_read("./City_of_Boulder_City_Limits.geojson") %>%
-  st_transform('ESRI:102286') %>%     # need to find ESRI code for Boulder
-  st_as_sf(coords = geometry, crs = 4326, agr = "constant")
+  st_transform('ESRI:102254')
 ```
 
 ```{r visualize, include=FALSE}
 
 
 ggplot() +
-  geom_sf(data = boulder_boundary, fill = "grey40") +
+  geom_sf(data = boulder_boundary, fill = NA, colour = "black") +
   geom_sf(data = boulder_homes, aes(colour = q5(price_per_sf)), 
           show.legend = "point", size = .75) +
   scale_colour_manual(values = palette5,
@@ -45,6 +42,9 @@ ggplot() +
                    name="Quintile\nBreaks") +
   labs(title="Price Per Square Foot, Boulder") +
   mapTheme()
+
+ggplot () +
+  geom_point(data = boulder_homes)
 
 ```
 
