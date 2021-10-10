@@ -1,12 +1,17 @@
 ---
 title: "midterm"
-output: html_document
+subtitle: "MUSA508 // Midterm"
+authors: Alex Cartwright & Max Masuda Farkas
+output:
+  html_document:
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
+library(tidycensus)
 library(sf)
 library(spdep)
 library(caret)
@@ -19,20 +24,44 @@ library(ggcorrplot)
 root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
 palette5 <- c("#25CB10", "#5AB60C", "#8FA108",   "#C48C04", "#FA7800")
+```
 
+```{r data pull}
 # create boulder_homes geojson dataset, convert to sf
 boulder_homes <- 
   st_read("studentData.geojson", crs = 'ESRI:102254' ) %>%
   mutate(price_per_sf = price / TotalFinishedSF)
 
 boulder_boundary <-
-  st_read("./City_of_Boulder_City_Limits.geojson") %>%
+  st_read("County_Boundary.geojson") %>%
   st_transform('ESRI:102254')
+
+boulder_zips <-
+  st_read("https://opendata.arcgis.com/datasets/6b6091f299204e4c9c406a624baf43e6_10.geojson") %>%
+  st_transform('ESRI:102254') %>%
+  st_intersection(boulder_boundary, boulder_zips)
+
+tracts19 <- 
+  get_acs(geography = "tract", variables = c(
+    "B25026_001E", "B02001_002E", "B15001_050E", "B15001_009E","B19013_001E","B25058_001E", "B06012_002E"), 
+          year=2019, state="CO", county="Boulder", geometry=T, output="wide") %>%
+  st_transform('ESRI:102254') %>%
+  rename(TotalPop = B25026_001E, 
+         Whites = B02001_002E,
+         FemaleBachelors = B15001_050E, 
+         MaleBachelors = B15001_009E,
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         year = "2019") %>%
+  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty)
 ```
 
-```{r visualize, include=FALSE}
-
-
+```{r price per square foot, include=TRUE, warning=FALSE, message=FALSE}
 ggplot() +
   geom_sf(data = boulder_boundary, fill = NA, colour = "black") +
   geom_sf(data = boulder_homes, aes(colour = q5(price_per_sf)), 
@@ -42,28 +71,12 @@ ggplot() +
                    name="Quintile\nBreaks") +
   labs(title="Price Per Square Foot, Boulder") +
   mapTheme()
-
-ggplot () +
-  geom_point(data = boulder_homes)
-
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r zip codes, include=TRUE, warning=FALSE, message=FALSE}
+ggplot() +
+  geom_sf(data = boulder_zips, fill = NA, colour = "black") +
+  geom_sf(data = boulder_boundary, fill = NA, colour = "red") +
+  labs(title="Zip Codes, Boulder County") +
+  mapTheme()
 ```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
