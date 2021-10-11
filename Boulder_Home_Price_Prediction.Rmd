@@ -1,7 +1,7 @@
 ---
 title: "midterm"
 subtitle: "MUSA508 // Midterm"
-authors: Alex Cartwright & Max Masuda Farkas
+authors: Alex Cartwright & Max Masuda-Farkas
 output:
   html_document:
     code_folding: hide
@@ -29,8 +29,10 @@ palette5 <- c("#25CB10", "#5AB60C", "#8FA108",   "#C48C04", "#FA7800")
 ```{r data pull}
 # create boulder_homes geojson dataset, convert to sf
 boulder_homes <- 
-  st_read("studentData.geojson", crs = 'ESRI:102254' ) %>%
-  mutate(price_per_sf = price / TotalFinishedSF)
+  st_read("studentData.geojson", crs = 'ESRI:102254') %>%
+  mutate(price_per_sf = price / TotalFinishedSF) %>% 
+  # add column for age of house
+  mutate(Age = 2021 - builtYear)
 
 boulder_boundary <-
   st_read("County_Boundary.geojson") %>%
@@ -39,7 +41,14 @@ boulder_boundary <-
 boulder_zips <-
   st_read("https://opendata.arcgis.com/datasets/6b6091f299204e4c9c406a624baf43e6_10.geojson") %>%
   st_transform('ESRI:102254') %>%
-  st_intersection(boulder_boundary, boulder_zips)
+  st_intersection(boulder_boundary, boulder_zips) %>%
+  # filter only zip codes and geometry
+  select(GEOID10, geometry)
+
+# NEED TO ADD ZIPS COLUMN TO boulder_homes
+boulder_homes <-
+  st_join(boulder_homes, boulder_zips) %>%
+  st_sf() 
 
 tracts19 <- 
   get_acs(geography = "tract", variables = c(
@@ -80,3 +89,67 @@ ggplot() +
   labs(title="Zip Codes, Boulder County") +
   mapTheme()
 ```
+
+```{r school districts, include=TRUE, warning=FALSE, message=FALSE}
+# CO school districts: NEED MORE GRANULAR MAP
+boulder_school_districts <-
+  st_read("./school_districts_colorado.geojson") %>%
+  st_transform('ESRI:102254') %>%
+  st_intersection(boulder_boundary, boulder_school_districts)
+
+```
+## Correlation Analysis
+
+### Sale Price as a Function of Four Numerical Variables
+```{r numerical variable correlation, include=TRUE, warning=FALSE, message=FALSE}
+
+st_drop_geometry(boulder_homes) %>% 
+  mutate(Age = 2021 - builtYear) %>%
+  dplyr::select(price, TotalFinishedSF, Age, mainfloorSF) %>%
+  filter(price <= 2000000, Age < 500) %>%
+  gather(Variable, Value, -price) %>% 
+   ggplot(aes(Value, price)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, ncol = 3, scales = "free") +
+     labs(title = "Price as a function of continuous variables") +
+     plotTheme()
+
+```
+
+### Sale Price as a Function of Three Categorical Variables
+```{r categorical variable correlation, include=TRUE, warning=FALSE, message=FALSE}
+
+# NEED TO TROUBLESHOOT
+boulder_homes %>% 
+  dplyr::select(price, nbrBedRoom, nbrFullBaths, designCodeDscr) %>%
+  mutate(nbrBedRoom = as.factor(nbrBedRoom)) %>%
+  filter(price <= 2000000) %>%
+  gather(Variable, Value, -price) %>% 
+   ggplot(aes(Value, price)) +
+     geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+     facet_wrap(~Variable, ncol = 1, scales = "free") +
+     labs(title = "Price as a function of\ncategorical variables", y = "Mean_Price") +
+     plotTheme() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+### Correlation Matrix
+``` {r correlation matrix, include=TRUE, warning=FALSE, message=FALSE}
+
+# NEED TO TROUBLESHOOT
+numericVars <- 
+  select_if(st_drop_geometry(boulder_homes), is.numeric) %>% na.omit()
+
+numericVars <-
+  na.omit(numericVars)
+
+ggcorrplot(
+  round(cor(numericVars), 1), 
+  p.mat = cor_pmat(numericVars),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across numeric variables") 
+
+```
+
