@@ -24,15 +24,22 @@ library(ggcorrplot)
 root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
 palette5 <- c("#25CB10", "#5AB60C", "#8FA108",   "#C48C04", "#FA7800")
+
+options(scipen = 999)
 ```
 
-```{r data pull}
+```{r data pull, message=FALSE, warning=FALSE, echo=TRUE}
 # create boulder_homes geojson dataset, convert to sf
 boulder_homes <- 
   st_read("studentData.geojson", crs = 'ESRI:102254') %>%
-  mutate(price_per_sf = price / TotalFinishedSF) %>% 
-  # add column for age of house
+  mutate(price_per_sf = price / TotalFinishedSF) %>%
   mutate(Age = 2021 - builtYear)
+
+boulder_homes_observed <- boulder_homes %>%
+  dplyr::filter(toPredict == 0)
+
+boulder_homes_predict <- boulder_homes %>%
+  dplyr::filter(toPredict == 0)
 
 boulder_boundary <-
   st_read("County_Boundary.geojson") %>%
@@ -45,40 +52,91 @@ boulder_zips <-
   # filter only zip codes and geometry
   select(GEOID10, geometry)
 
-# NEED TO ADD ZIPS COLUMN TO boulder_homes
-boulder_homes <-
-  st_join(boulder_homes, boulder_zips) %>%
-  st_sf() 
+var19 <- load_variables(2019, "acs5", cache = TRUE)
 
-tracts19 <- 
-  get_acs(geography = "tract", variables = c(
-    "B25026_001E", "B02001_002E", "B15001_050E", "B15001_009E","B19013_001E","B25058_001E", "B06012_002E"), 
-          year=2019, state="CO", county="Boulder", geometry=T, output="wide") %>%
-  st_transform('ESRI:102254') %>%
-  rename(TotalPop = B25026_001E, 
-         Whites = B02001_002E,
-         FemaleBachelors = B15001_050E, 
-         MaleBachelors = B15001_009E,
-         MedHHInc = B19013_001E, 
-         MedRent = B25058_001E,
-         TotalPoverty = B06012_002E) %>%
-  dplyr::select(-NAME, -starts_with("B")) %>%
-  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
-         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
-         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-         year = "2019") %>%
-  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty)
+acs_vars <- c(
+  "B19013_001E", # Med HH Income
+  "B06010_001E", # total earners
+  "B06010_011E", # number of earners making over $75K
+  "C24070_001E", # Labor force
+  "C24070_002E", # Agriculture, forestry, fishing and hunting, and mining
+  "C24070_003E", # Construction
+  "C24070_004E", # Manufacturing
+  "C24070_005E", # Wholesale trade
+  "C24070_006E", # Retail trade
+  "C24070_007E", # Transportation and warehousing, and utilities
+  "C24070_008E", # Information
+  "C24070_009E", # Finance and insurance, and real estate, and rental and leasing
+  "C24070_010E", # Professional, scientific, and management, and administrative, and waste management services
+  "C24070_011E", # Educational services, and  health care and social assistance
+  "C24070_012E") # Arts, entertainment, and recreation, and accommodation and food services
+
+acsTractsBoulder.2019.sf <- get_acs(geography = "tract",
+                                   year = 2019, 
+                                   variables = acs_vars, 
+                                   geometry = TRUE, 
+                                   state = "CO", 
+                                   county = "Boulder", 
+                                   output = "wide") %>%
+  st_transform('ESRI:102254')
+
+acsTractsBoulder.2019.sf <- acsTractsBoulder.2019.sf %>%
+  dplyr::select(GEOID, NAME, all_of(acs_vars)) %>%
+  rename(med_HH_Income = B19013_001E,
+         tot_earners = B06010_001E,
+         over75K = B06010_011E,
+         employed = C24070_001E,
+         Ag_Mining = C24070_002E,
+         Construction = C24070_003E,
+         Manufacturing = C24070_004E,
+         Wholesale = C24070_005E,
+         Retail = C24070_006E,
+         Transportation = C24070_007E,
+         Information = C24070_008E,
+         Finance = C24070_009E,
+         Professional = C24070_010E,
+         Ed_Health = C24070_011E,
+         ArtsRecEnt = C24070_012E) %>%
+  mutate(
+         pct.over75K = over75K/tot_earners,
+         pct.Ag_Mining = Ag_Mining/employed,
+         pct.Construction = Construction/employed,
+         pct.Manufacturing = Manufacturing/employed,
+         pct.Wholesale = Wholesale/employed,
+         pct.Retail = Retail/employed,
+         pct.Transportation = Transportation/employed,
+         pct.Information = Information/employed,
+         pct.Finance = Finance/employed,
+         pct.Professional = Professional/employed,
+         pct.Ed_Health = Ed_Health/employed,
+         pct.ArtsRecEnt = ArtsRecEnt/employed)
+
+censusFactors <- acsTractsBoulder.2019.sf %>%
+  select(med_HH_Income, pct.over75K)
 ```
 
-```{r price per square foot, include=TRUE, warning=FALSE, message=FALSE}
+```{r preliminary mapping, include=TRUE, warning=FALSE, message=FALSE}
+# Price per square foot
 ggplot() +
   geom_sf(data = boulder_boundary, fill = NA, colour = "black") +
-  geom_sf(data = boulder_homes, aes(colour = q5(price_per_sf)), 
+  geom_sf(data = boulder_homes_observed, aes(colour = q5(price_per_sf)), 
           show.legend = "point", size = .75) +
   scale_colour_manual(values = palette5,
                    labels=qBr(boulder_homes,"price_per_sf"),
                    name="Quintile\nBreaks") +
   labs(title="Price Per Square Foot, Boulder") +
+  mapTheme()
+
+# Sale Price + zipcodes
+ggplot() +
+  geom_sf(data = boulder_boundary, fill = NA, colour = "black") +
+  geom_sf(data = boulder_zips, fill = NA, colour = "#55286F") +
+  geom_sf(data = boulder_homes_observed, aes(colour = q5(price)), 
+          show.legend = "point", size = .75) +
+  scale_colour_manual(values = palette5,
+                   labels=qBr(boulder_homes,"price"),
+                   name="Quintile\nBreaks") +
+  labs(title="Sale Price, Boulder") +
   mapTheme()
 ```
 
@@ -98,15 +156,48 @@ boulder_school_districts <-
   st_intersection(boulder_boundary, boulder_school_districts)
 
 ```
+
+```{r trailheads, include=TRUE, warning=FALSE, message=FALSE}
+trailheads <-
+  st_read("https://opendata.arcgis.com/datasets/3a950053bbef46c6a3c2abe3aceee3de_0.geojson") %>%
+  st_transform('ESRI:102254') %>%
+  st_intersection(boulder_boundary, trailheads)
+
+ggplot() +
+  geom_sf(data = boulder_boundary, fill = NA, colour = "black") +
+  geom_sf(data = boulder_homes_observed, aes(colour = q5(price)), 
+          show.legend = "point", size = .75) +
+  scale_colour_manual(values = palette5,
+                   labels=qBr(boulder_homes,"price"),
+                   name="Quintile\nBreaks") +
+  geom_sf(data = trailheads, colour = "red") +
+  labs(title="Boulder") +
+  mapTheme()
+```
+
+```{r build the model dataset, include=TRUE, warning=FALSE, message=FALSE}
+
+# Select variables from boulder_homes
+boulder.sf <- boulder_homes_observed %>%
+  select(price, TotalFinishedSF, nbrRoomsNobath, Age)
+
+# Join zip codes to boulder.sf - NOT THAT HELPFUL IN EARLY TESTING
+# boulder.sf <-
+#   st_join(boulder.sf, boulder_zips)
+
+boulder.sf <-
+  st_join(boulder.sf, censusFactors)
+```
+
 ## Correlation Analysis
 
 ### Sale Price as a Function of Four Numerical Variables
 ```{r numerical variable correlation, include=TRUE, warning=FALSE, message=FALSE}
 
-st_drop_geometry(boulder_homes) %>% 
-  mutate(Age = 2021 - builtYear) %>%
-  dplyr::select(price, TotalFinishedSF, Age, mainfloorSF) %>%
-  filter(price <= 2000000, Age < 500) %>%
+st_drop_geometry(boulder.sf) %>%
+  dplyr::select(price, TotalFinishedSF, nbrBedRoom, med_HH_Income,
+                pct.over75K, pct.Professional) %>%
+  filter(price <= 2000000) %>%
   gather(Variable, Value, -price) %>% 
    ggplot(aes(Value, price)) +
      geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
@@ -136,12 +227,8 @@ boulder_homes %>%
 ### Correlation Matrix
 ``` {r correlation matrix, include=TRUE, warning=FALSE, message=FALSE}
 
-# NEED TO TROUBLESHOOT
 numericVars <- 
-  select_if(st_drop_geometry(boulder_homes), is.numeric) %>% na.omit()
-
-numericVars <-
-  na.omit(numericVars)
+  select_if(st_drop_geometry(boulder.sf), is.numeric) %>% na.omit(
 
 ggcorrplot(
   round(cor(numericVars), 1), 
@@ -153,3 +240,25 @@ ggcorrplot(
 
 ```
 
+```{r PartionData, include=TRUE, warning=FALSE, message=FALSE}
+inTrain <- createDataPartition(
+              y = paste(boston.sf$NUM_FLOORS.cat, boston.sf$Style, boston.sf$R_AC), 
+              p = .60, list = FALSE)
+boston.training <- boston.sf[inTrain,] 
+boston.test <- boston.sf[-inTrain,]  
+
+reg.training <- lm(SalePrice ~ ., data = st_drop_geometry(boston.training) %>% 
+                                    dplyr::select(SalePrice, LivingArea, Style, 
+                                               GROSS_AREA, NUM_FLOORS.cat,
+                                               R_BDRMS, R_FULL_BTH, R_HALF_BTH, 
+                                               R_KITCH, R_AC, R_FPLACE,
+                                               crimes.Buffer))
+```
+
+
+## OLS Regression
+
+```{r regression 1, include=TRUE, message=FALSE, warning=FALSE, echo=TRUE}
+reg1 <- lm(price ~ ., data = st_drop_geometry(boulder.sf))
+summary(reg1)
+```
