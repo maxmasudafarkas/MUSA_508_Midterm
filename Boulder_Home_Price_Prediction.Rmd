@@ -38,6 +38,8 @@ boulder_homes <-
 boulder_homes_observed <- boulder_homes %>%
   dplyr::filter(toPredict == 0)
 
+# Alex: Did you intend for boulder_homes_predict to be identical to
+# boulder_homes_observed? i.e. (toPredict == 0)
 boulder_homes_predict <- boulder_homes %>%
   dplyr::filter(toPredict == 0)
 
@@ -148,14 +150,83 @@ ggplot() +
   mapTheme()
 ```
 
-```{r school districts, include=TRUE, warning=FALSE, message=FALSE}
-# CO school districts: NEED MORE GRANULAR MAP
-boulder_school_districts <-
-  st_read("./school_districts_colorado.geojson") %>%
+```{r schools, include=TRUE, warning=FALSE, message=FALSE}
+boulder_schools <-
+  st_read("./colorado_schools.geojson") %>%
   st_transform('ESRI:102254') %>%
-  st_intersection(boulder_boundary, boulder_school_districts)
+  st_intersection(boulder_boundary, boulder_schools) %>%
+  filter(Type_ %in% c("Non-Public School Mailing Address",
+         "Public School Physical Address"))
+
+group_by(boulder_schools, Type_) %>%
+  summarize(count = n())
 
 ```
+
+```{r school density maps, include=TRUE, warning=FALSE, message=FALSE}
+boulder_private_schools <-
+  boulder_schools %>%
+    filter(Type_ == "Non-Public School Mailing Address") %>%
+    dplyr::select(LATITUDE, LONGITUDE) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs = 4326, agr = "constant") %>%
+    st_transform('ESRI:102254') %>%
+    distinct()
+
+boulder_public_schools <-
+  boulder_schools %>%
+    filter(Type_ == "Public School Physical Address") %>%
+    dplyr::select(LATITUDE, LONGITUDE) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs = 4326, agr = "constant") %>%
+    st_transform('ESRI:102254') %>%
+    distinct()
+
+ggplot() + geom_sf(data = boulder_boundary, fill = "grey40") +
+  stat_density2d(data = data.frame(st_coordinates(boulder_private_schools)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "#25CB10", high = "#FA7800", 
+                      breaks=c(0.000000003,0.00000003),
+                      labels=c("Minimum","Maximum"), name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "Density of Private Schools, Boulder County") +
+  mapTheme()
+
+ggplot() + geom_sf(data = boulder_boundary, fill = "grey40") +
+  stat_density2d(data = data.frame(st_coordinates(boulder_public_schools)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "#25CB10", high = "#FA7800", 
+                      breaks=c(0.000000003,0.00000003),
+                      labels=c("Minimum","Maximum"), name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "Density of Public Schools, Boulder County") +
+  mapTheme()
+
+```
+
+``` {r schools nearest neighbor correlation, include=TRUE, warning=FALSE, message=FALSE}
+
+st_c <- st_coordinates
+
+boulder_homes_observed <-
+  boulder_homes_observed %>% 
+    mutate(
+      schools_nn3 = nn_function(st_c(boulder_homes_observed), st_c(boulder_schools), 3))
+
+st_drop_geometry(boulder_homes_observed) %>%
+  dplyr::select(price, schools_nn3) %>%
+  filter(price <= 1000000) %>%
+  gather(Variable, Value, -price) %>% 
+   ggplot(aes(Value, price)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, ncol = 3, scales = "free") +
+     labs(title = "Price as a function of average distance to three nearest schools") +
+     plotTheme()
+
+```
+
 
 ```{r trailheads, include=TRUE, warning=FALSE, message=FALSE}
 trailheads <-
@@ -228,15 +299,15 @@ boulder_homes %>%
 ``` {r correlation matrix, include=TRUE, warning=FALSE, message=FALSE}
 
 numericVars <- 
-  select_if(st_drop_geometry(boulder.sf), is.numeric) %>% na.omit(
+  select_if(st_drop_geometry(boulder.sf), is.numeric) %>% na.omit()
 
 ggcorrplot(
   round(cor(numericVars), 1), 
   p.mat = cor_pmat(numericVars),
   colors = c("#25CB10", "white", "#FA7800"),
   type="lower",
-  insig = "blank") +  
-    labs(title = "Correlation across numeric variables") 
+  insig = "blank") +   
+    labs(title = "Correlation across numeric variables")
 
 ```
 
