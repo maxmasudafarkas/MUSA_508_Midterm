@@ -38,10 +38,8 @@ boulder_homes <-
 boulder_homes_observed <- boulder_homes %>%
   dplyr::filter(toPredict == 0)
 
-# Alex: Did you intend for boulder_homes_predict to be identical to
-# boulder_homes_observed? i.e. (toPredict == 0)
 boulder_homes_predict <- boulder_homes %>%
-  dplyr::filter(toPredict == 0)
+  dplyr::filter(toPredict == 1)
 
 boulder_boundary <-
   st_read("County_Boundary.geojson") %>%
@@ -246,19 +244,6 @@ ggplot() +
   mapTheme()
 ```
 
-```{r build the model dataset, include=TRUE, warning=FALSE, message=FALSE}
-
-# Select variables from boulder_homes
-boulder.sf <- boulder_homes_observed %>%
-  select(price, TotalFinishedSF, nbrRoomsNobath, Age)
-
-# Join zip codes to boulder.sf - NOT THAT HELPFUL IN EARLY TESTING
-# boulder.sf <-
-#   st_join(boulder.sf, boulder_zips)
-
-boulder.sf <-
-  st_join(boulder.sf, censusFactors)
-```
 
 ## Correlation Analysis
 
@@ -311,20 +296,26 @@ ggcorrplot(
 
 ```
 
-```{r PartionData, include=TRUE, warning=FALSE, message=FALSE}
-inTrain <- createDataPartition(
-              y = paste(boston.sf$NUM_FLOORS.cat, boston.sf$Style, boston.sf$R_AC), 
-              p = .60, list = FALSE)
-boston.training <- boston.sf[inTrain,] 
-boston.test <- boston.sf[-inTrain,]  
+```{r build the model dataset, include=TRUE, warning=FALSE, message=FALSE}
 
-reg.training <- lm(SalePrice ~ ., data = st_drop_geometry(boston.training) %>% 
-                                    dplyr::select(SalePrice, LivingArea, Style, 
-                                               GROSS_AREA, NUM_FLOORS.cat,
-                                               R_BDRMS, R_FULL_BTH, R_HALF_BTH, 
-                                               R_KITCH, R_AC, R_FPLACE,
-                                               crimes.Buffer))
+# Select variables from boulder_homes
+feature_list <-
+  c("price", "designCodeDscr", "qualityCodeDscr", "nbrBedRoom",
+    "nbrRoomsNobath", "mainfloorSF", "nbrFullBaths", "TotalFinishedSF",
+    "Age", "schools_nn3")
+
+boulder.sf <- boulder_homes_observed %>%
+  select(feature_list)
+
+# Join zip codes to boulder.sf - NOT THAT HELPFUL IN EARLY TESTING
+# boulder.sf <-
+#   st_join(boulder.sf, boulder_zips)
+
+boulder.sf <-
+  st_join(boulder.sf, censusFactors)
 ```
+
+
 
 
 ## OLS Regression
@@ -332,4 +323,49 @@ reg.training <- lm(SalePrice ~ ., data = st_drop_geometry(boston.training) %>%
 ```{r regression 1, include=TRUE, message=FALSE, warning=FALSE, echo=TRUE}
 reg1 <- lm(price ~ ., data = st_drop_geometry(boulder.sf))
 summary(reg1)
+```
+
+```{r PartionData, include=TRUE, warning=FALSE, message=FALSE}
+# excluding boulder.sf$designCodeDscr and boulder.sf$qualityCodeDscr for now
+# because they were returning errors
+## SOMETHING STRANGE IS HAPPENING: boulder.training much larger than boulder.sf
+inTrain <- createDataPartition(
+              y = c(boulder.sf$price, boulder.sf$nbrBedRoom,
+                    boulder.sf$nbrRoomsNobath, boulder.sf$mainfloorSF,
+                    boulder.sf$nbrFullBaths, boulder.sf$TotalFinishedSF,
+                    boulder.sf$Age, boulder.sf$schools_nn3,
+                    boulder.sf$med_HH_Income, boulder.sf$pct.over75K),
+              p = 0.75, list = FALSE)
+boulder.training <- boulder.sf[inTrain,]
+boulder.test <- boulder.sf[-inTrain,]
+
+reg.training <- lm(price ~ ., data = st_drop_geometry(boulder.training))
+
+boulder.test <-
+  boulder.test %>%
+  mutate(price.predict = predict(reg.training, boulder.test),
+         price.error = price.predict - price,
+         price.abserror = abs(price.predict - price),
+         price.ape = (abs(price.predict - price)) / price.predict)%>%
+  filter(price < 5000000)
+```
+
+``` {r summary statistics, include=TRUE, warning=FALSE, message=FALSE}
+
+mean(boulder.test$price.abserror, na.rm = T)
+mean(mean(boulder.test$price.ape, na.rm = T))
+
+```
+
+``` {r cross validation, include=TRUE, warning=FALSE, message=FALSE}
+
+fitControl <- trainControl(method = "cv", number = 100)
+set.seed(825)
+
+reg.cv <- 
+  train(price ~ ., data = st_drop_geometry(boulder.sf))
+     method = "lm", trControl = fitControl, na.action = na.pass)
+
+reg.cv
+
 ```
