@@ -20,6 +20,7 @@ library(FNN)
 library(grid)
 library(gridExtra)
 library(ggcorrplot)
+library(kableExtra)
 
 root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
@@ -146,8 +147,8 @@ boulder_homes <-
   boulder_homes %>% 
     mutate(
       schools_nn3 = nn_function(st_c(boulder_homes), st_c(boulder_schools), 3))
-
 ```
+
 
 ```{r school density maps, include=FALSE, warning=FALSE, message=FALSE}
 
@@ -291,6 +292,23 @@ boulder.sf <- boulder_homes_observed %>%
 
 ```
 
+``` {r spatial price lag, include=TRUE, warning=FALSE, message=FALSE}
+
+coords <- st_coordinates(boulder.sf) 
+
+neighborList <- knn2nb(knearneigh(coords, 5))
+
+spatialWeights <- nb2listw(neighborList, style="W")
+
+boulder.sf$lagPrice <- lag.listw(spatialWeights, boulder.sf$price)
+
+boulder.sf %>%
+  ggplot(aes(lagPrice, price)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     labs(title = "Price as a function of the spatial lag of price") +
+     plotTheme()
+```
+
 ## Correlation Analysis
 
 ### Sale Price as a Function of Four Numerical Variables
@@ -429,6 +447,40 @@ ggplot(mae, aes(x = mae)) +
   labs(title = "Distribution of MAE",
        subtitle = "k-fold cross validation; k = 100",
        x = "Mean Absolute Error", y = "Count") +
+  plotTheme()
+
+```
+
+
+``` {r spatial error lag, include=TRUE, warning=FALSE, message=FALSE}
+
+coords.test <- st_coordinates(boulder.test) 
+
+neighborList.test <- knn2nb(knearneigh(coords.test, 5))
+
+spatialWeights.test <- nb2listw(neighborList.test, style="W")
+
+boulder.test %>%
+  mutate(lagPriceError = lag.listw(spatialWeights.test, price.error)) %>%
+  ggplot(aes(lagPriceError, price.error)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     labs(title = "Error as a function of the spatial lag of price") +
+     plotTheme()
+```
+
+``` {r moran's i, include=TRUE, warning=FALSE, message=FALSE}
+
+moranTest <- moran.mc(boulder.test$price.error,
+                      spatialWeights.test, nsim = 999)
+
+ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
+  geom_histogram(binwidth = 0.01) +
+  geom_vline(aes(xintercept = moranTest$statistic), colour = "#FA7800",size=1) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  labs(title="Observed and permuted Moran's I",
+       subtitle= "Observed Moran's I in orange",
+       x="Moran's I",
+       y="Count") +
   plotTheme()
 
 ```
