@@ -380,13 +380,27 @@ ggcorrplot(
 ## OLS Regression
 
 ```{r regression 1, include=TRUE, message=FALSE, warning=FALSE, echo=TRUE}
+# add ZipCode to reg1
 reg1 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>%
              dplyr::select("price", "med_HH_Income", "pct.over75K", "pct.Information",
                            "pct.Finance", "pct.Professional","pct.Ed_Health",
                            "nbrBedRoom", "nbrFullBaths","TotalFinishedSF", "AcDscr",
                            "Age", "schools_nn3", "trailheads_nn5", "dist_FR", 
-                           "qualityCodeDscr", "designCodeDscr"))
+                           "qualityCodeDscr", "designCodeDscr", "ZipCode"))
 summary(reg1)
+```
+
+```{r predictions, include=TRUE, message=FALSE, warning=FALSE, echo=TRUE}
+
+boulder_homes_predict$price <-
+  predict.lm(reg1, boulder_homes_predict)
+
+boulder_homes_predict_condensed <-
+  subset(boulder_homes_predict, select=c("price", "MUSA_ID")) %>%
+  st_drop_geometry()
+
+write.csv(boulder_homes_predict_condensed, "./The_Simon_&_Garfunkel_Tribute_Band.csv")
+
 ```
 
 ```{r PartionData, include=TRUE, warning=FALSE, message=FALSE}
@@ -573,4 +587,6 @@ bothRegressions %>%
   labs(title="Predicted sale price as a function of observed price",
        subtitle="Orange line represents a perfect prediction; Green line represents prediction") +
   plotTheme()
+
+# for generalizability, use reg1
 ```
