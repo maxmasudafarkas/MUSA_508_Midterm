@@ -7,6 +7,7 @@ output:
   html_document:
     toc: true
     toc_float: TRUE
+    number_sections: true
     code_folding: hide
 ---
 
@@ -25,9 +26,7 @@ library(grid)
 library(gridExtra)
 library(ggcorrplot)
 library(kableExtra)
-library(patchwork)
 library(stargazer)
-library(broom)
 
 root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
@@ -221,7 +220,7 @@ boulder.sf <- boulder_homes_observed %>%
   select(feature_list)
 ```
 
-### Regression Summary Statistics
+## Regression Summary Statistics
 
 ```{r regression 1, include=FALSE, message=FALSE, warning=FALSE, echo=TRUE}
 reg1 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>%
@@ -232,17 +231,15 @@ reg1 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>%
                            "qualityCodeDscr", "designCodeDscr", "ZipCode"))
 ```
 
-```{r summary of reg1, echo=FALSE, results='asis'}
+The summary statistics of the full model are presented below.
+
+```{r summary of reg1, results="asis", message=FALSE, echo=FALSE}
 # summarytable1 <- data.frame(stargazer(reg1, type = "text"))
 
-summarytable1 <- tidy(reg1)
-
-kable(
-  summarytable1
-)
+stargazer(reg1, type = "html")
 ```
 
-### Correlation Matrix
+## Correlation Matrix
 
 What is the use of a correlation matrix? What correlations do we see?
 
@@ -260,7 +257,7 @@ ggcorrplot(
          caption = "Figure 1.1")
 ```
 
-### Home Price Correlation Scatterplots
+## Variable Correlation Scatterplots
 
 What are the factors? Why did we choose them? What trends do we see?
 
@@ -277,7 +274,7 @@ st_drop_geometry(boulder.sf) %>%
      plotTheme()
 ```
 
-### Spatial Distribution of Home Sale Prices in Boulder County
+## Spatial Distribution of Home Sale Prices in Boulder County
 
 ```{r sale price map}
 # Price per square foot
@@ -293,7 +290,7 @@ ggplot() +
   mapTheme()
 ```
 
-### Mapping Independent Variables
+## Mapping Independent Variables
 
 ```{r map of distance from front range}
 # Distance from the Front Range
@@ -305,7 +302,8 @@ ggplot() +
   scale_colour_manual(values = palette5,
                    labels=qBr(boulder_homes,"dist_FR"),
                    name="Quintile\nBreaks") +
-  labs(title="Home distance from Front Range") +
+  labs(title="Home distance from Front Range",
+       caption = "Figure 1.4") +
   mapTheme()
 ```
 
@@ -316,7 +314,8 @@ ggplot() +
   geom_sf(data = acsTractsBoulder.2019.sf, aes(fill = med_HH_Income)) +
   scale_fill_viridis_b() +
   labs(title = "Median Household Income in Boulder County",
-       subtitle = "by Census Tract") +
+       subtitle = "by Census Tract",
+       caption = "Figure 1.5") +
   mapTheme()
 ```
 
@@ -325,7 +324,8 @@ ggplot() +
 ggplot() +
   geom_sf(data = boulder_boundary, fill = NA, colour = "black") +
   geom_sf(data = boulder_schools, colour = "#2d6a4f") +
-  labs(title = "Schools in Boulder County") +
+  labs(title = "Schools in Boulder County",
+       caption = "Figure 1.6") +
   mapTheme()
 ```
 
@@ -339,7 +339,8 @@ ggplot() +
   scale_colour_manual(values = palette5,
                    labels=qBr(boulder_homes,"price"),
                    name="Quintile\nBreaks") +
-  labs(title="Home Sale Prices + Zip Code Areas") +
+  labs(title="Home Sale Prices + Zip Code Areas",
+       caption = "Figure 1.7") +
   mapTheme()
 ```
 
@@ -363,9 +364,13 @@ reg.training <- lm(price ~ ., data = as.data.frame(boulder.training) %>%
                            "qualityCodeDscr", "designCodeDscr", "ZipCode"))
 ```
 
-```{r summary of training regression, include = TRUE}
-summary(reg.training)
+The following summary table presents the results of the linear regression on the training data set.
+
+```{r summary of training regression, results="asis", message=FALSE, echo=FALSE}
+stargazer(reg.training, type = "html")
 ```
+
+## Test Set Results
 
 ```{r predict on test set, include=FALSE, warning=FALSE, message=FALSE}
 boulder.test <-
@@ -384,14 +389,10 @@ A summary of the mean absolute error and mean average percent error (MAPE) for t
 mean(boulder.sf$price, na.rm = T)
 test.MAE <- c(mean(boulder.test$price.abserror, na.rm = T))
 test.MAPE <- c(mean(boulder.test$price.ape, na.rm = T))
+test.SumStats <- data.frame(test.MAE, test.MAPE) 
 
-test.SumStats <- data.frame(test.MAE, test.MAPE)
-
-kable(
-  test.SumStats,
-  col.names = c("MAE", "MAPE"),
-  caption = "Test Set Error Metrics"
-)
+test.SumStats %>%
+  kable(col.names = c("MAE", "MAPE"), caption = "Test Set Error Metrics")
 ```
 
 Graphic representations of the results of the test set prediction are shown below.
@@ -406,7 +407,7 @@ ggplot(boulder.test, aes(x = price.abserror)) +
   plotTheme()
 ```
 
-#### Cross Validation Results
+## Cross Validation Results
 
 ```{r cross validation, include=TRUE, warning=FALSE, message=FALSE}
 fitControl <- trainControl(method = "cv", number = 100)
@@ -438,11 +439,12 @@ The prices predicted for the test set are plotted against the actual sale prices
 
 ```{r predicted vs observed, include=TRUE, message=FALSE}
 ggplot(boulder.test) +
-  geom_point(aes(price.predict, price)) +
+  geom_point(aes(price, price.predict)) +
   geom_smooth(aes(price, price), colour = "orange") +
-  geom_smooth(method = "lm", aes(price.predict, price), se = FALSE, colour = "green") +
+  geom_smooth(method = "lm", aes(price, price.predict), se = FALSE, colour = "green") +
   labs(title = "Predicted sale price as a function of observed price",
-       x = "Predicted Sale Price", y = "Observed Sale Price") +
+       subtitle = "Orange line represents a perfect prediction; Green line represents prediction",
+       x = "Observed Sale Price", y = "Predicted Sale Price") +
   plotTheme()
 ```
 
@@ -474,7 +476,7 @@ boulder.test %>%
   mutate(lagPriceError = lag.listw(spatialWeights.test, price.error)) %>%
   ggplot(aes(lagPriceError, price.error)) +
      geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
-     labs(title = "Error as a function of the spatial lag of price") +
+     labs(title = "Error as a function of the spatial lag of price errors") +
      plotTheme()
 ```
 
@@ -495,74 +497,24 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
   plotTheme()
 ```
 
-We still need a map of mean absolute percent error by neighborhood
+```{r all predicted values, include=TRUE}
+allPredictions <- boulder_homes %>%
+  mutate(predictions = predict(reg1, boulder_homes)) %>%
+  dplyr::select(predictions)
 
-We need the scatterplot of MAPE by neighborhood of mean price by neighborhood
-
-```{r accounting for spatial autocorrelation, include=TRUE, warning=FALSE, message=FALSE}
-left_join(
-  st_drop_geometry(boulder.test) %>%
-    group_by(ZipCode) %>%
-    summarize(meanPrice = mean(price, na.rm = T)),
-  mutate(boulder.test, predict.fe = 
-                        predict(lm(price ~ ZipCode, data = boulder.test), 
-                        boulder.test)) %>%
-    st_drop_geometry %>%
-    group_by(ZipCode) %>%
-      summarize(meanPrediction = mean(predict.fe))) %>%
-      kable() %>% kable_styling()
-
-# new regression accounting for areal (municipality/zip code/census tract) effects
-
-reg.nhood <- lm(price ~ ., data = as.data.frame(boulder.training) %>%       
-                  dplyr::select("price", "med_HH_Income", "pct.over75K", 
-                                "pct.Information", "pct.Finance", "pct.Professional",
-                                "pct.Ed_Health","nbrBedRoom", "nbrFullBaths",
-                                "TotalFinishedSF", "AcDscr", "Age", "schools_nn3",
-                                "trailheads_nn5", "dist_FR", "qualityCodeDscr",
-                                "designCodeDscr", "Municipality"))
-
-boulder.test.nhood <-
-  boulder.test %>%
-  mutate(Regression = "Neighborhood Effects",
-         price.predict = predict(reg.nhood, boulder.test),
-         price.error = price.predict- price,
-         price.abserror = abs(price.predict- price),
-         price.ape = (abs(price.predict- price)) / price)%>%
-  filter(price < 5000000)
-
-# Bring both regressions into one data frame
-
-bothRegressions <- 
-  rbind(
-    dplyr::select(boulder.test, starts_with("price"), Regression, ZipCode) %>%
-      mutate(lagPriceError = lag.listw(spatialWeights.test, price.error)),
-    dplyr::select(boulder.test.nhood, starts_with("price"), Regression, ZipCode) %>%
-      mutate(lagPriceError = lag.listw(spatialWeights.test, price.error)))
-
-st_drop_geometry(bothRegressions) %>%
-  gather(Variable, Value, -Regression, -ZipCode) %>%
-  filter(Variable == "price.abserror" | Variable == "price.ape") %>%
-  group_by(Regression, Variable) %>%
-    summarize(meanValue = mean(Value, na.rm = T)) %>%
-    spread(Variable, meanValue) %>%
-    kable()
-
-bothRegressions %>%
-  dplyr::select(price.predict, price, Regression) %>%
-    ggplot(aes(price, price.predict)) +
-  geom_point() +
-  stat_smooth(aes(price, price), 
-             method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
-  stat_smooth(aes(price.predict, price), 
-              method = "lm", se = FALSE, size = 1, colour="#25CB10") +
-  facet_wrap(~Regression) +
-  labs(title="Predicted sale price as a function of observed price",
-       subtitle="Orange line represents a perfect prediction; Green line represents prediction") +
-  plotTheme()
+ggplot() +
+  geom_sf(data = boulder_boundary, fill = "grey") +
+  geom_sf(data = allPredictions, aes(colour = q5(predictions)), 
+          show.legend = "point", size = .75) +
+  scale_colour_manual(values = palette5,
+                   labels=qBr(allPredictions,"predictions"),
+                   name="Quintile\nBreaks") +
+  labs(title="Predictions for all homes in the dataset, Boulder County",
+       caption = "Figure X.X") +
+  mapTheme()
 ```
 
-There is something so strange going on in this one zip code. Clearly the model is confused about something. The map is at least plotting what is required, but it shows that there is a gap in our approach.
+There is something so strange going on in this one zip code.
 
 ```{r map of MAPE by Zip Code}
 st_drop_geometry(boulder.test) %>%
@@ -580,7 +532,32 @@ st_drop_geometry(boulder.test) %>%
       mapTheme()
 ```
 
-#### Generalizability
+We need the scatterplot of MAPE by zip of mean price by zip
+
+```{r MAPE by zip vs mean price by zip}
+testError_by_zips <-
+left_join(
+  st_drop_geometry(boulder.test) %>%
+    group_by(ZipCode) %>%
+    summarize(meanPrice = mean(price, na.rm = T)),
+  st_drop_geometry(boulder.test) %>%
+    group_by(ZipCode) %>%
+    summarize(MAPE = mean(price.ape)))
+
+testError_by_zips %>%
+  kable() %>% kable_styling()
+```
+
+```{r map of test errors by zip, warning=FALSE, message=FALSE}
+ggplot(testError_by_zips) +
+  geom_point(aes(meanPrice, MAPE)) +
+  geom_smooth(method = "lm", aes(meanPrice, MAPE), se = FALSE, colour = "green") +
+  labs(title = "MAPE by Zip Code as a function of mean price by Zip Code",
+       x = "Mean Home Price", y = "MAPE") +
+  plotTheme()
+```
+
+## Generalizability
 
 Is the model generalizable?
 
