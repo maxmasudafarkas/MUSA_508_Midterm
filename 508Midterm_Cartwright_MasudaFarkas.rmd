@@ -11,6 +11,18 @@ output:
     code_folding: hide
 ---
 
+# Introduction
+
+Determining the value of a home is becoming increasingly mechanized. With the  maturation of statistical modeling techniques and machine learning, a process that was once driven largely by negotiations between individual actors—and the hard-to-measure factor of human taste—can now be abstracted by computers. The purpose of this project is to do just that: to devise a machine learning model that can accurately predict the sale price of a home based on both intrinsic and environmental factors.
+
+Before any discussion of the techniques used to design this model, it is important to emphasize what, and whom, such a thing benefits. We do not believe that machines should learn merely for learning’s sake. A model that can predict home prices, however, stands to benefit many interests. The most obvious, of course, is home buyers and sellers who can refer to the model as a benchmark, obviating much of the needless back-and-forth that characterizes real estate negotiations.
+
+But there are others who would be better off, too. Neighbors ought to have a sense of their local real estate market given that the value of one home tends to influence that of the next. Local governments, agencies, and other public service providers would also be beneficiaries since they need an accurate measure of the local economy to craft good policy. Finally, foreign investors and businesses that funnel private capital and create jobs in cities are not usually equipped with the local intelligence necessary to make investment decisions, relying inefficiently on the word of locals. An automated valuation model can help to give them that information easily.
+
+The model used in this project is what is known as a hedonic model. Not to be confused with the ancient Greek school of philosophy, hedonic models refer to predictive models that synthesize a variety of discrete factors to derive a final prediction. Here, our hedonic model for home price predictions takes input factors from three primary categories: (1) the physical attributes of each property, (2) nearby public amenities or disamenities, and (3) the clustering of home prices in physical space (also known in the real estate industry as “comparables” or “comps”). A detailed list of the specific factors used in our model follows in the Data section below.
+
+The accuracy of our results can be assessed using a host of different metrics, but the most salient is the R^2 value, measuring how much variation in price is explained by the model. The final model here returned an R^2 value of approximately 0.49, indicating that just under 50% of the variation was explained by the model. 
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -41,16 +53,9 @@ knitr::include_graphics("Simon_and_Garfunkel_1968_poster.png")
 
 # Data
 
--Briefly describe your methods for gathering the data.
--Present a table of summary statistics with variable descriptions. Sort these variables by
-their category (internal characteristics, amenities/public services or spatial structure). Check out
-the `stargazer` package for this.
--Present a correlation matrix
--Present 4 home price correlation scatterplots that you think are of interest. I’m going to
-look for interesting open data that you’ve integrated with the home sale observations.
--Develop 1 map of your dependent variable (sale price)
--Develop 3 maps of 3 of your most interesting independent variables.
--Include any other maps/graphs/charts you think might be of interest.
+Every piece of data that was fed into the model falls under one of the three categories stated above (see Introduction). Although the bulk of the data on each home’s internal attributes was already given (e.g. square footage, number of rooms, etc.), data from the second and third categories—that is, nearby amenities or disamenities and spatial patterns—needed to be sourced externally. 
+
+Public data sources that were used to do so include the U.S. Census Bureau for demographic information, the State of Colorado’s open data portal for the locations of schools, and Boulder County’s open data portal for local ZIP codes and points of interest for recreation such as trailheads.
 
 ```{r data wrangling, include = FALSE, message = FALSE, warning = FALSE}
 # ----- create boulder_homes geojson dataset, convert to sf, condition data -----
@@ -241,7 +246,7 @@ stargazer(reg1, type = "html")
 
 ## Correlation Matrix
 
-What is the use of a correlation matrix? What correlations do we see?
+The correlation matrix below depicts how related or unrelated each feature is to the others. For instance, how far a home is from the Front Range appears to be negatively correlated to price, i.e. closeness to the Front Range corresponds to higher price. (Importantly, note that correlation is distinct from causation and that the matrix only serves as a helpful guide for determining relevant factors for the model.)
 
 ``` {r correlation matrix, include=TRUE, warning=FALSE, message=FALSE}
 numericVars <- 
@@ -259,7 +264,9 @@ ggcorrplot(
 
 ## Variable Correlation Scatterplots
 
-What are the factors? Why did we choose them? What trends do we see?
+Scatterplots are another means of showing correlation. The four features shown here are (moving clockwise beginning from the top left): (1) percentage of the population with income greater than $75,000 per year, (2) percentage of the population associated with professional or management services, (3) the average of the distances to the nearest five trailheads, and (4) the average of the distances to the nearest three schools.
+
+The first two demographic features are positively correlated with price, meaning that a greater share of the population with higher income and in professional services corresponds to higher price. Contrariwise, homes that are further away from trailheads and schools correspond to lower prices. 
 
 ```{r numerical variable scatterplots, include=TRUE, warning=FALSE, message=FALSE}
 st_drop_geometry(boulder.sf) %>%
@@ -275,6 +282,8 @@ st_drop_geometry(boulder.sf) %>%
 ```
 
 ## Spatial Distribution of Home Sale Prices in Boulder County
+
+Although homes are sold for a wide range of prices across Boulder County, the prices that these homes have fetched tends to cluster in space. The following map demonstrates this phenomenon.
 
 ```{r sale price map}
 # Price per square foot
@@ -292,6 +301,10 @@ ggplot() +
 
 ## Mapping Independent Variables
 
+Just as the model’s outcome variable, home sale price, can be depicted on the map, so too can the features that the model will use to predict that outcome. Three of these features are mapped here.
+
+First, the distance between each home and the Front Range is color-coded accordingly below, with the Front Range itself included for reference.
+
 ```{r map of distance from front range}
 # Distance from the Front Range
 ggplot() +
@@ -307,6 +320,8 @@ ggplot() +
   mapTheme()
 ```
 
+One of the U.S. Census variables, median household income, is mapped according by Census tract.
+
 ```{r map of medHHincome}
 # Median Household Income in Boulder County
 ggplot() + 
@@ -318,6 +333,8 @@ ggplot() +
        caption = "Figure 1.5") +
   mapTheme()
 ```
+
+Finally, the distribution of schools, both public and private, in Boulder County is depicted below. 
 
 ```{r map of schools in Boulder County}
 # Distance from the Front Range
@@ -346,7 +363,13 @@ ggplot() +
 
 # Methods
 
-Briefly describe your method (remember who your audience is).
+The type of statistical model used here is called a Linear Regression, or an Ordinary Least Squares regression. This type of model synthesizes a list of relevant components to produce a function representing the distribution of individual observations. In this case, the model was derived from the various data features described above, factoring in each home’s internal and environmental characteristics to predict price.
+
+The strength of a prediction model can be distilled down to two interrelated qualities: accuracy and generalizability.
+
+Accuracy refers to the ability of a model to produce predicted values that are as close as possible to the actual observed values. To test the accuracy of the model here, the original data was divided into two groups. One group, the training set, represented 75% of the original data and was used to create, or “train,” the regression model. The second group, the test set, represented the remaining 25% of the data and was used to measure how close, or not, the predictions came to the corresponding observed values. Accuracy can be measured by the metrics of “mean absolute error” (MAE) and “mean absolute percent error” (MAPE).
+
+Generalizability refers to the ability of a model to make predictions based on new, unseen data. The generalizability of the model here was tested using a method known as cross-validation. The dataset was divided into 100 subsets, and each subset was further divided into training and testing sets. Errors across all 100 subsets were averaged to capture how well the model performs on data that it has yet to encounter.
 
 # Results
 
@@ -448,7 +471,7 @@ ggplot(boulder.test) +
   plotTheme()
 ```
 
-Map of residual absolute errors for the test set
+Residual absolute errors for the test set are mapped onto Boulder County below.
 
 ```{r test set residual errors, include = TRUE}
 ggplot() +
@@ -463,7 +486,7 @@ ggplot() +
   mapTheme()
 ```
 
-Plot of the spatial lag in errors for the test set
+Because of the geographically clustered nature of real estate, errors in price predictions tend also to cluster in space. This phenomenon is known as the “spatial lag.” The following plot depicts the spatial lag of errors in the model. 
 
 ``` {r spatial error lag, include=TRUE, warning=FALSE, message=FALSE}
 coords.test <- st_coordinates(boulder.test) 
@@ -480,7 +503,7 @@ boulder.test %>%
      plotTheme()
 ```
 
-Plot of the Moran's I test on the test set
+The clustering effect of home prices—the technical term is “spatial autocorrelation”—can also be demonstrated by the statistic known as Moran’s I. A Moran’s I that nears positive 1 is an indication of clustering, whereas a 0 value indicates a random distribution. In the figure below, the observed Moran’s I, depicted in orange, is contrasted with 999 randomly distributed values, showing that home prices in Boulder do indeed cluster in space.
 
 ``` {r morans i, include=TRUE, warning=FALSE, message=FALSE}
 moranTest <- moran.mc(boulder.test$price.error,
@@ -559,7 +582,11 @@ ggplot(testError_by_zips) +
 
 ## Generalizability
 
-Is the model generalizable?
+The model's generalizability can be evaluated in relation to factors on the map. Below, two Census factors are depicted in Boulder County: race as a function of white vs. non-white and income level.
+
+That Boulder County has a relatively racially homogeneous makeup would seem to indicate that the model is fairly generalizable on that score. Variations in income might present an obstacle to generalizability, in contrast.
+
+(The greatest challenge to the model's generalizability comes in the urban-rural distinction, however, as discussed later in this project.)
 
 ```{r generalizability, include=TRUE, warning=FALSE, message=FALSE}
 boulder_tracts19 <- 
@@ -596,15 +623,20 @@ div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
 </style>
 <div class = "blue">
 
-Is this an effective model? What were some of the more interesting variables?
-How much of the variation in prices could you predict? Describe the more important features?
-Describe the error in your predictions? According to your maps, could you account the spatial
-variation in prices? Where did the model predict particularly well? Poorly? Why do you think this
-might be?
+The above results suggest that the model was effective in some respects and defective in others. In sum, the model was able to predict just under 50% of the variation in prices. The accuracy of the model varied widely according to the feature. The two that clearly outperformed the rest were distance to schools and the Front Range. Both were highly statistically significant and contributed substantially to the model, particularly when considered in the aggregate.
+
+Conversely, the ZIP codes of each home were, surprisingly, not especially significant on their own. Despite one's common sense intuition about the importance of a house’s ZIP code, the results suggest that on an individual basis, ZIP codes were not strongly determinative of price. That said, it is notable that when in the process of modeling ZIP codes were removed from the model, the overall accuracy declined markedly. That would indicate that ZIP codes, while relatively insignificant on a per-property basis, are integral to the model as a whole.
+
+Both the strength and weakness of the model can be attributed to the geography of Boulder County. The model excelled in urban areas, clustered around Boulder and other large municipalities contained within the greater county. The reason for this is likely that environmental features such as nearness to schools and recreational amenities are of greater importance for homes in the denser parts of the county, whose residents actively consider such elements when purchasing a home.
+
+On the other hand, the model saw a sizable drop in accuracy in the rural parts of the county. Certain properties located further in the mountains were clearly sui generis, with prices that diverged significantly from the rest. The model struggled to account for these properties, likely because many of the features important in urban areas are simply inapposite in the rural context. Homebuyers who are seeking a mountain getaway house, for example, are less interested in their house’s proximity to schools.
 
 </div>
 
 # Conclusion
 
-Would you recommend your model to Zillow? Why or why not? How might you
-improve this model?
+Although it represents a fine starting point, the model in its present form would likely not be ready for deployment by Zillow. Beyond even the need to improve base metrics such as average error, the more fundamental problems identified in the Discussion section would need to be remedied before Zillow’s vast user base could rely on the model.
+
+Thankfully, several areas for improvement can already be identified. To start, more features should be added. Data which were not included in the model but which would doubtless prove useful include crime data, school districts ranked by desirability, and other features that better account for the clustering effects of home prices, such as neighborhoods. Although these data may not be available in pre-packaged form from the open data sources used here, these obstacles are likely overcome by clever engineering.
+
+To the urban–rural issue articulated in the previous section, one possible solution is to revise the model to predict initially for price per square foot rather than total price. Price per square foot better measures the effect of location on property value, as it is more comparable across properties irrespective of the physical buildings. When coupled with more variables that account for the spatial clustering of price, a price-per-square-foot metric would likely distinguish between urban and rural properties better than the current model.
