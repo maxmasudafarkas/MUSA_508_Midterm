@@ -21,7 +21,7 @@ But there are others who would be better off, too. Neighbors ought to have a sen
 
 The model used in this project is what is known as a hedonic model. Not to be confused with the ancient Greek school of philosophy, hedonic models refer to predictive models that synthesize a variety of discrete factors to derive a final prediction. Here, our hedonic model for home price predictions takes input factors from three primary categories: (1) the physical attributes of each property, (2) nearby public amenities or disamenities, and (3) the clustering of home prices in physical space (also known in the real estate industry as “comparables” or “comps”). A detailed list of the specific factors used in our model follows in the Data section below.
 
-The accuracy of our results can be assessed using a host of different metrics, but the most salient is the R^2 value, measuring how much variation in price is explained by the model. The final model here returned an R^2 value of approximately 0.49, indicating that just under 50% of the variation was explained by the model. 
+The accuracy of our results can be assessed using a host of different metrics, but the most salient is the adjusted R^2 value, measuring how much variation in price is explained by the model. The predictive model here returned an adjusted R^2 value of approximately 0.516, indicating that just over 50% of the variation was explained by the model. 
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -236,7 +236,7 @@ reg1 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>%
                            "qualityCodeDscr", "designCodeDscr", "ZipCode"))
 ```
 
-The summary statistics of the full model are presented below.
+A summary of regression statistics for the variables used in the predictive model is presented below.
 
 ```{r summary of reg1, results="asis", message=FALSE, echo=FALSE}
 # summarytable1 <- data.frame(stargazer(reg1, type = "text"))
@@ -320,7 +320,7 @@ ggplot() +
   mapTheme()
 ```
 
-One of the U.S. Census variables, median household income, is mapped according by Census tract.
+One of the U.S. Census variables, median household income, is mapped by Census tract.
 
 ```{r map of medHHincome}
 # Median Household Income in Boulder County
@@ -334,17 +334,19 @@ ggplot() +
   mapTheme()
 ```
 
-Finally, the distribution of schools, both public and private, in Boulder County is depicted below. 
+Another amenity/public service factor used in the model is the proximity of a home to schools. Figure 1.6 presents the distribution of schools, both public and private, in Boulder County. 
 
 ```{r map of schools in Boulder County}
 # Distance from the Front Range
 ggplot() +
   geom_sf(data = boulder_boundary, fill = NA, colour = "black") +
-  geom_sf(data = boulder_schools, colour = "#2d6a4f") +
+  geom_sf(data = boulder_schools, colour = "#2d6a4f", show.legend = "point") +
   labs(title = "Schools in Boulder County",
        caption = "Figure 1.6") +
   mapTheme()
 ```
+
+Finally, Zip Code areas for the county are used to examine the spatial structure of home price in figure 1.7. It is apparent that some zip codes host a higher percentage of high value homes compared to others.
 
 ```{r sale price and zip codes}
 # Sale Price + zipcodes
@@ -369,7 +371,7 @@ The strength of a prediction model can be distilled down to two interrelated qua
 
 Accuracy refers to the ability of a model to produce predicted values that are as close as possible to the actual observed values. To test the accuracy of the model here, the original data was divided into two groups. One group, the training set, represented 75% of the original data and was used to create, or “train,” the regression model. The second group, the test set, represented the remaining 25% of the data and was used to measure how close, or not, the predictions came to the corresponding observed values. Accuracy can be measured by the metrics of “mean absolute error” (MAE) and “mean absolute percent error” (MAPE).
 
-Generalizability refers to the ability of a model to make predictions based on new, unseen data. The generalizability of the model here was tested using a method known as cross-validation. The dataset was divided into 100 subsets, and each subset was further divided into training and testing sets. Errors across all 100 subsets were averaged to capture how well the model performs on data that it has yet to encounter.
+Generalizability refers to the ability of a model to make predictions based on new, unseen data. The generalizability of the model here was tested using a method known as k-fold cross-validation, using 100 folds. The full dataset was divided into 100 subsets, and 100 regressions are performed, each round leaving one subset out of the data to be used as the test set for that round. Price prediction errors across all 100 subsets were averaged to capture how well the model performs on data that it has yet to encounter.
 
 # Results
 
@@ -387,13 +389,13 @@ reg.training <- lm(price ~ ., data = as.data.frame(boulder.training) %>%
                            "qualityCodeDscr", "designCodeDscr", "ZipCode"))
 ```
 
-The following summary table presents the results of the linear regression on the training data set.
+As discussed, the dataset was split into a training set and a test set. The following summary table presents the results of the linear regression on the training data set.
 
 ```{r summary of training regression, results="asis", message=FALSE, echo=FALSE}
 stargazer(reg.training, type = "html")
 ```
 
-## Test Set Results
+## Initial Test Set Results
 
 ```{r predict on test set, include=FALSE, warning=FALSE, message=FALSE}
 boulder.test <-
@@ -408,17 +410,17 @@ boulder.test <-
 
 A summary of the mean absolute error and mean average percent error (MAPE) for the price prediction on the test data set is shown below.
 
-``` {r summary statistics for test set, include = FALSE, warning=FALSE, message=FALSE}
+``` {r summary statistics for test set, include = TRUE, warning=FALSE, message=FALSE}
 mean(boulder.sf$price, na.rm = T)
 test.MAE <- c(mean(boulder.test$price.abserror, na.rm = T))
 test.MAPE <- c(mean(boulder.test$price.ape, na.rm = T))
-test.SumStats <- data.frame(test.MAE, test.MAPE) 
+test.SumStats <- data.frame(test.MAE, test.MAPE)
 
 test.SumStats %>%
   kable(col.names = c("MAE", "MAPE"), caption = "Test Set Error Metrics")
 ```
 
-Graphic representations of the results of the test set prediction are shown below.
+Graphic representations of the results of the test set prediction are shown below. The histogram shows that the absolute price errors are generally concentrated around the mean, but there are some very large errors.
 
 ```{r ACCURACY//visualize, include=TRUE, warning=FALSE, message=FALSE}
 # histogram of absolute errors
@@ -426,7 +428,8 @@ ggplot(boulder.test, aes(x = price.abserror)) +
   geom_histogram(binwidth=10000, fill = "green", colour = "white") +
   scale_x_continuous(limits = c(0, 1000000)) +
   labs(title = "Distribution of prediction errors for single test",
-       x = "Sale Price Absolute Error", y = "Count") +
+       x = "Sale Price Absolute Error", y = "Count",
+       caption = "Figure 4.1") +
   plotTheme()
 ```
 
@@ -441,7 +444,7 @@ reg.cv <-
      method = "lm", trControl = fitControl, na.action = na.pass)
 ```
 
-K-fold cross validation with 100 folds is used to explore the generalizability of this model. A histogram of the mean average error across the 100 folds is shown below.
+K-fold cross validation with 100 folds is used to explore the generalizability of this model. A histogram of the mean average error across the 100 folds is shown below. These results indicate that the model is somewhat generalizable, but there are situations where the predictions are highly inaccurate, as seen in the high mean absolute error outlier.
 
 ```{r exploring cross validation results, include=TRUE, warning=FALSE, message=FALSE}
 # histogram of cross validation MAE
@@ -454,11 +457,14 @@ ggplot(mae, aes(x = mae)) +
                      limits = c(0, 500000)) +
   labs(title = "Distribution of MAE",
        subtitle = "k-fold cross validation; k = 100",
-       x = "Mean Absolute Error", y = "Count") +
+       x = "Mean Absolute Error", y = "Count",
+       caption = "Figure 4.2") +
   plotTheme()
 ```
 
-The prices predicted for the test set are plotted against the actual sale prices for the test set in the figure below.
+### Exploring Test Set Prediction Error
+
+The prices predicted for the test set are plotted against the actual sale prices for the test set in the figure below. As observed sale price increases, this predictive model tends to under-predict the value of a home, demonstrated by the widening gap between the green line (actual prediction trend) and the orange line (perfect prediction) in the plot below.
 
 ```{r predicted vs observed, include=TRUE, message=FALSE}
 ggplot(boulder.test) +
@@ -467,7 +473,8 @@ ggplot(boulder.test) +
   geom_smooth(method = "lm", aes(price, price.predict), se = FALSE, colour = "green") +
   labs(title = "Predicted sale price as a function of observed price",
        subtitle = "Orange line represents a perfect prediction; Green line represents prediction",
-       x = "Observed Sale Price", y = "Predicted Sale Price") +
+       x = "Observed Sale Price", y = "Predicted Sale Price",
+       caption = "Figure 4.3") +
   plotTheme()
 ```
 
@@ -482,7 +489,7 @@ ggplot() +
                    labels=qBr(boulder.test,"price.abserror"),
                    name="Quintile\nBreaks") +
   labs(title="Test set absolute price errors",
-       caption = "Figure X.X") +
+       caption = "Figure 4.4") +
   mapTheme()
 ```
 
@@ -499,7 +506,9 @@ boulder.test %>%
   mutate(lagPriceError = lag.listw(spatialWeights.test, price.error)) %>%
   ggplot(aes(lagPriceError, price.error)) +
      geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
-     labs(title = "Error as a function of the spatial lag of price errors") +
+     labs(title = "Error as a function of the spatial lag of price errors",
+          x = "Lag of Price Errors", y = "Price Error",
+          caption = "Figure 4.5") +
      plotTheme()
 ```
 
@@ -516,9 +525,14 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
   labs(title="Observed and permuted Moran's I",
        subtitle= "Observed Moran's I in orange",
        x="Moran's I",
-       y="Count") +
+       y="Count",
+       caption = "Figure 4.6") +
   plotTheme()
 ```
+
+### Predictions for full dataset
+
+
 
 ```{r all predicted values, include=TRUE}
 allPredictions <- boulder_homes %>%
@@ -533,13 +547,18 @@ ggplot() +
                    labels=qBr(allPredictions,"predictions"),
                    name="Quintile\nBreaks") +
   labs(title="Predictions for all homes in the dataset, Boulder County",
-       caption = "Figure X.X") +
+       caption = "Figure 4.7") +
   mapTheme()
 ```
 
-There is something so strange going on in this one zip code.
 
-```{r map of MAPE by Zip Code}
+## Generalizability
+
+### Exploring Spatial Structure
+
+Zip Codes were used as a categorical feature in the predictive model to examine the importance of spatial structure in home price. Mapping the prediction errors by Zip Code indicates where the model is lacking clarity on the underlying drivers of home price. Figure 4.8 shows that the home prices in zip codes in the north and west of the county are not well understood by the model.
+
+```{r map of MAPE by Zip Code, include = TRUE, message = FALSE, warning = FALSE}
 st_drop_geometry(boulder.test) %>%
   group_by(ZipCode) %>%
   summarize(mean.MAPE = mean(price.ape, na.rm = T)) %>%
@@ -551,13 +570,14 @@ st_drop_geometry(boulder.test) %>%
       geom_sf(data = boulder.test, colour = "black", size = .5) +
       scale_fill_gradient(low = palette5[1], high = palette5[5],
                           name = "MAPE") +
-      labs(title = "Mean test set MAPE by Zip Code") +
+      labs(title = "Mean test set MAPE by Zip Code",
+           caption = "Figure 4.8") +
       mapTheme()
 ```
 
-We need the scatterplot of MAPE by zip of mean price by zip
+The table below and the scatterplot in Figure 4.9 also indicate that the model is decent at predicting in different spatial regimes within the county, but performs poorly in a few cases. Further investigation is required to understand the underlying causes of poor predictions in certain regions.
 
-```{r MAPE by zip vs mean price by zip}
+```{r MAPE by zip vs mean price by zip, include = TRUE, message = FALSE, warning = FALSE}
 testError_by_zips <-
 left_join(
   st_drop_geometry(boulder.test) %>%
@@ -576,13 +596,14 @@ ggplot(testError_by_zips) +
   geom_point(aes(meanPrice, MAPE)) +
   geom_smooth(method = "lm", aes(meanPrice, MAPE), se = FALSE, colour = "green") +
   labs(title = "MAPE by Zip Code as a function of mean price by Zip Code",
-       x = "Mean Home Price", y = "MAPE") +
+       x = "Mean Home Price", y = "MAPE",
+       caption = "Figure 4.9") +
   plotTheme()
 ```
 
-## Generalizability
+### Generalizing Across Demographic Groups
 
-The model's generalizability can be evaluated in relation to factors on the map. Below, two Census factors are depicted in Boulder County: race as a function of white vs. non-white and income level.
+The model's generalizability can be evaluated in relation to demographic categories. Below, two Census factors are depicted in Boulder County: race as a function of white vs. non-white and income level.
 
 That Boulder County has a relatively racially homogeneous makeup would seem to indicate that the model is fairly generalizable on that score. Variations in income might present an obstacle to generalizability, in contrast.
 
@@ -618,11 +639,6 @@ grid.arrange(ncol = 2,
 
 # Discussion
 
-<style>
-div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
-</style>
-<div class = "blue">
-
 The above results suggest that the model was effective in some respects and defective in others. In sum, the model was able to predict just under 50% of the variation in prices. The accuracy of the model varied widely according to the feature. The two that clearly outperformed the rest were distance to schools and the Front Range. Both were highly statistically significant and contributed substantially to the model, particularly when considered in the aggregate.
 
 Conversely, the ZIP codes of each home were, surprisingly, not especially significant on their own. Despite one's common sense intuition about the importance of a house’s ZIP code, the results suggest that on an individual basis, ZIP codes were not strongly determinative of price. That said, it is notable that when in the process of modeling ZIP codes were removed from the model, the overall accuracy declined markedly. That would indicate that ZIP codes, while relatively insignificant on a per-property basis, are integral to the model as a whole.
@@ -631,12 +647,17 @@ Both the strength and weakness of the model can be attributed to the geography o
 
 On the other hand, the model saw a sizable drop in accuracy in the rural parts of the county. Certain properties located further in the mountains were clearly sui generis, with prices that diverged significantly from the rest. The model struggled to account for these properties, likely because many of the features important in urban areas are simply inapposite in the rural context. Homebuyers who are seeking a mountain getaway house, for example, are less interested in their house’s proximity to schools.
 
-</div>
 
 # Conclusion
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
 
 Although it represents a fine starting point, the model in its present form would likely not be ready for deployment by Zillow. Beyond even the need to improve base metrics such as average error, the more fundamental problems identified in the Discussion section would need to be remedied before Zillow’s vast user base could rely on the model.
 
 Thankfully, several areas for improvement can already be identified. To start, more features should be added. Data which were not included in the model but which would doubtless prove useful include crime data, school districts ranked by desirability, and other features that better account for the clustering effects of home prices, such as neighborhoods. Although these data may not be available in pre-packaged form from the open data sources used here, these obstacles are likely overcome by clever engineering.
 
 To the urban–rural issue articulated in the previous section, one possible solution is to revise the model to predict initially for price per square foot rather than total price. Price per square foot better measures the effect of location on property value, as it is more comparable across properties irrespective of the physical buildings. When coupled with more variables that account for the spatial clustering of price, a price-per-square-foot metric would likely distinguish between urban and rural properties better than the current model.
+
+</div>
